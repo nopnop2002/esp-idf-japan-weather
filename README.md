@@ -2,6 +2,8 @@
 Display the Japanese weather on M5Stack.   
 M5Stacに[Yahoo Japan](https://weather.yahoo.co.jp/weather/rss/)が提供する天気予報を表示します。   
 
+![Gothic-1](https://user-images.githubusercontent.com/6020549/89112965-b33c7e80-d4a5-11ea-9073-dc72e9c05fb3.JPG)
+
 ---
 
 # Hardware requirements
