@@ -46,18 +46,26 @@ Wi-Fiに接続するときの最大再試行回数
 ## View1
 初期表示   
 M5Stackの左ボタンを押すとこの表示になります。   
+上：Gothicフォント　下：Mincyoフォント   
 
 ![Gothic-1](https://user-images.githubusercontent.com/6020549/89112965-b33c7e80-d4a5-11ea-9073-dc72e9c05fb3.JPG)
 ![Mincyo-1](https://user-images.githubusercontent.com/6020549/89112966-b59ed880-d4a5-11ea-8e0f-59491781d64d.JPG)
 
 ## View2
-M5Stackの真ん中のボタンを押すとこの表示にしなります。   
+M5Stackの真ん中のボタンを押すとこの表示になります。   
+上：Gothicフォント　下：Mincyoフォント   
 
 ![Gothic-2](https://user-images.githubusercontent.com/6020549/89112975-d0714d00-d4a5-11ea-9292-a207a8839244.JPG)
 ![Mincyo-2](https://user-images.githubusercontent.com/6020549/89112976-d1a27a00-d4a5-11ea-98f3-987cafd4a648.JPG)
 
 ## Update
 M5Stackの右ボタンを押すとRSSからデータを再度取得します。
+
+---
+
+# XMP Parser   
+[こちら](https://libexpat.github.io/doc/)のライブラリを使用しています。   
+このライブラリはesp-idf標準ライブラリです。   
 
 ---
 
