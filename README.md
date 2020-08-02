@@ -64,7 +64,7 @@ M5Stackの右ボタンを押すとRSSからデータを再度取得します。
 ---
 
 # XMP Parser   
-[こちら](https://libexpat.github.io/doc/)のライブラリを使用しています。   
+[こちら](https://libexpat.github.io/)のライブラリを使用しています。   
 このライブラリはesp-idf標準ライブラリです。   
 
 ---
