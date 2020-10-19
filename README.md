@@ -1,6 +1,6 @@
 # esp-idf-japan-weather
 Display the Japanese weather on M5Stack.   
-M5Stacに[Yahoo Japan](https://weather.yahoo.co.jp/weather/rss/)が提供する天気予報を表示します。   
+M5Stackに[Yahoo Japan](https://weather.yahoo.co.jp/weather/rss/)が提供する天気予報を表示します。   
 
 ![Gothic-1](https://user-images.githubusercontent.com/6020549/89112965-b33c7e80-d4a5-11ea-9073-dc72e9c05fb3.JPG)
 
@@ -35,6 +35,9 @@ Wifiのパスワード
 Wi-Fiに接続するときの最大再試行回数
 - CONFIG_ESP_LOCATION   
 [こちら](https://weather.yahoo.co.jp/weather/rss/)のページから地域を選び、表示されるURLの末尾の番号を指定します。   
+例えば愛知県名古屋市の場合   
+https://rss-weather.yahoo.co.jp/rss/days/5110.xml
+なので、5110を設定します。   
 - CONFIG_ESP_FONT   
 使用するフォント
 
@@ -65,7 +68,7 @@ M5Stackの右ボタンを押すとRSSからデータを再度取得します。
 
 ---
 
-# XMP Parser   
+# XML Parser   
 [こちら](https://libexpat.github.io/)のライブラリを使用しています。   
 このライブラリはesp-idf標準ライブラリです。   
 
