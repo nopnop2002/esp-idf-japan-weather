@@ -72,18 +72,17 @@ typedef struct {
 } user_data_t;
 
 static QueueHandle_t xQueueCmd;
-static RingbufHandle_t xRingbuffer;
 
 /* This project use WiFi configuration that you can set via 'make menuconfig'.
 
    If you'd rather not, just change the below entries to strings with
-   the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
+   the config you want - ie #define ESP_WIFI_SSID "mywifissid"
 */
 
-#define EXAMPLE_ESP_WIFI_SSID		CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS		CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_MAXIMUM_RETRY	CONFIG_ESP_MAXIMUM_RETRY
-#define EXAMPLE_ESP_LOCATION		CONFIG_ESP_LOCATION
+#define ESP_WIFI_SSID		CONFIG_ESP_WIFI_SSID
+#define ESP_WIFI_PASS		CONFIG_ESP_WIFI_PASSWORD
+#define ESP_MAXIMUM_RETRY	CONFIG_ESP_MAXIMUM_RETRY
+#define ESP_LOCATION		CONFIG_ESP_LOCATION
 
 
 /* Root cert for weather.yahoo.co.jp, taken from weather_yahoo_cert.pem
@@ -101,9 +100,11 @@ extern const char weather_yahoo_cert_pem_end[]	asm("_binary_weather_yahoo_cert_p
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
+	static char *output_buffer;  // Buffer to store response of http request from event handler
+	static int output_len;		 // Stores number of bytes read
 	switch(evt->event_id) {
 		case HTTP_EVENT_ERROR:
-			ESP_LOGE(TAG, "HTTP_EVENT_ERROR");
+			ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
 			break;
 		case HTTP_EVENT_ON_CONNECTED:
 			ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
@@ -116,29 +117,52 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 			break;
 		case HTTP_EVENT_ON_DATA:
 			ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
-			if (!esp_http_client_is_chunked_response(evt->client)) {
-				//char buffer[512];
-				ESP_LOGD(TAG, "evt->data_len=%d", evt->data_len);
-				char *buffer = malloc(evt->data_len + 1);
-				esp_http_client_read(evt->client, buffer, evt->data_len);
-				buffer[evt->data_len] = 0;
-				//ESP_LOGI(TAG, "buffer=%s", buffer);
-				UBaseType_t res = xRingbufferSend(xRingbuffer, buffer, evt->data_len, pdMS_TO_TICKS(1000));
-				if (res != pdTRUE) {
-					ESP_LOGE(TAG, "Failed to xRingbufferSend");
+			ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, content_length=%d", esp_http_client_get_content_length(evt->client));
+			ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, output_len=%d", output_len);
+			// If user_data buffer is configured, copy the response into the buffer
+			if (evt->user_data) {
+				memcpy(evt->user_data + output_len, evt->data, evt->data_len);
+			} else {
+				if (output_buffer == NULL && esp_http_client_get_content_length(evt->client) > 0) {
+					output_buffer = (char *) malloc(esp_http_client_get_content_length(evt->client));
+					output_len = 0;
+					if (output_buffer == NULL) {
+						ESP_LOGE(TAG, "Failed to allocate memory for output buffer");
+						return ESP_FAIL;
+					}
 				}
-				free(buffer);
+				memcpy(output_buffer + output_len, evt->data, evt->data_len);
 			}
+			output_len += evt->data_len;
 			break;
 		case HTTP_EVENT_ON_FINISH:
 			ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+			if (output_buffer != NULL) {
+				// Response is accumulated in output_buffer. Uncomment the below line to print the accumulated response
+				// ESP_LOG_BUFFER_HEX(TAG, output_buffer, output_len);
+				free(output_buffer);
+				output_buffer = NULL;
+			}
+			output_len = 0;
 			break;
 		case HTTP_EVENT_DISCONNECTED:
 			ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+			int mbedtls_err = 0;
+			esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
+			if (err != 0) {
+				if (output_buffer != NULL) {
+					free(output_buffer);
+					output_buffer = NULL;
+				}
+				output_len = 0;
+				ESP_LOGE(TAG, "Last esp error code: 0x%x", err);
+				ESP_LOGE(TAG, "Last mbedtls failure: 0x%x", mbedtls_err);
+			}
 			break;
 	}
 	return ESP_OK;
 }
+
 
 // Left Button Monitoring
 void buttonA(void *pvParameters)
@@ -223,28 +247,28 @@ void buttonC(void *pvParameters)
 
 static void XMLCALL start_element(void *userData, const XML_Char *name, const XML_Char **atts)
 {
-    ESP_LOGD(TAG, "start_element name=%s", name);
-    user_data_t *user_data = (user_data_t *) userData;
-    int depth = user_data->depth;
+	ESP_LOGD(TAG, "start_element name=%s", name);
+	user_data_t *user_data = (user_data_t *) userData;
+	int depth = user_data->depth;
 	if (depth == 0) {
-	    strcpy(user_data->tag, name);
+		strcpy(user_data->tag, name);
 	} else {
-	    strcat(user_data->tag, "/");
-	    strcat(user_data->tag, name);
+		strcat(user_data->tag, "/");
+		strcat(user_data->tag, name);
 	}
-    ++user_data->depth;
+	++user_data->depth;
 }
 
 static void XMLCALL end_element(void *userData, const XML_Char *name)
 {
-    ESP_LOGD(TAG, "end_element name[%d]=%s", strlen(name), name);
-    user_data_t *user_data = (user_data_t *) userData;
+	ESP_LOGD(TAG, "end_element name[%d]=%s", strlen(name), name);
+	user_data_t *user_data = (user_data_t *) userData;
 	int tagLen = strlen(user_data->tag);
 	int offset = tagLen - strlen(name) -1;
 	user_data->tag[offset] = 0;
-    ESP_LOGD(TAG, "tag=[%s]", user_data->tag);
-    //int depth = user_data->depth;
-    --user_data->depth;
+	ESP_LOGD(TAG, "tag=[%s]", user_data->tag);
+	//int depth = user_data->depth;
+	--user_data->depth;
 }
 
 static size_t getOneChar(char * src, int offset, char * dst) {
@@ -266,10 +290,10 @@ static size_t getOneChar(char * src, int offset, char * dst) {
 	
 static void data_handler(void *userData, const XML_Char *s, int len)
 {
-    user_data_t *user_data = (user_data_t *) userData;
-    //int depth = user_data->depth;
-    ESP_LOGD(TAG, "tag=[%s]", user_data->tag);
-    ESP_LOGD(TAG, "depth=%d len=%d s=[%.*s]", user_data->depth, len, len, s);
+	user_data_t *user_data = (user_data_t *) userData;
+	//int depth = user_data->depth;
+	ESP_LOGD(TAG, "tag=[%s]", user_data->tag);
+	ESP_LOGD(TAG, "depth=%d len=%d s=[%.*s]", user_data->depth, len, len, s);
 
 	int offset = 0;
 	char dst[4];
@@ -330,21 +354,46 @@ static void data_handler(void *userData, const XML_Char *s, int len)
 }
 
 
-void http_client_get(char * url, user_data_t * userData)
+
+size_t http_client_content_length(char * url)
 {
-#if 0
-	esp_http_client_config_t config = {
-		.url = "https://rss-weather.yahoo.co.jp/rss/days/5110.xml",
-		.event_handler = _http_event_handler,
-		.cert_pem = weather_yahoo_cert_pem_start,
-	};
-#else
+	ESP_LOGI(TAG, "http_client_content_length url=%s",url);
+	size_t content_length;
+	
 	esp_http_client_config_t config = {
 		.url = url,
 		.event_handler = _http_event_handler,
+		//.user_data = local_response_buffer,		   // Pass address of local buffer to get response
 		.cert_pem = weather_yahoo_cert_pem_start,
 	};
-#endif
+	esp_http_client_handle_t client = esp_http_client_init(&config);
+
+	// GET
+	esp_err_t err = esp_http_client_perform(client);
+	if (err == ESP_OK) {
+		ESP_LOGD(TAG, "HTTP GET Status = %d, content_length = %d",
+				esp_http_client_get_status_code(client),
+				esp_http_client_get_content_length(client));
+		content_length = esp_http_client_get_content_length(client);
+
+	} else {
+		ESP_LOGW(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
+		content_length = 0;
+	}
+	esp_http_client_cleanup(client);
+	return content_length;
+}
+
+esp_err_t http_client_content_get(char * url, char * response_buffer)
+{
+	ESP_LOGI(TAG, "http_client_content_get url=%s",url);
+
+	esp_http_client_config_t config = {
+		.url = url,
+		.event_handler = _http_event_handler,
+		.user_data = response_buffer,		   // Pass address of local buffer to get response
+		.cert_pem = weather_yahoo_cert_pem_start,
+	};
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 
 	// GET
@@ -353,66 +402,60 @@ void http_client_get(char * url, user_data_t * userData)
 		ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d",
 				esp_http_client_get_status_code(client),
 				esp_http_client_get_content_length(client));
-
-		// Chcek http response
-		if (esp_http_client_get_status_code(client) != 200) {
-			ESP_LOGE(TAG, "HTTP get fail. URL is [%s]", url);
-			while (1) { vTaskDelay(1); }
-		}
-
-		// Receive an item from no-split ring buffer
-		int bufferSize = esp_http_client_get_content_length(client);
-		char *buffer = malloc(bufferSize + 1); 
-		if (buffer == NULL) {
-			ESP_LOGE(TAG, "malloc fail");
-			while (1) { vTaskDelay(1); }
-		}
-		size_t item_size;
-		int	index = 0;
-		while (1) {
-			char *item = (char *)xRingbufferReceive(xRingbuffer, &item_size, pdMS_TO_TICKS(1000));
-			if (item != NULL) {
-				ESP_LOGD(TAG, "index=%d item_size=%d", index, item_size);
-				for (int i = 0; i < item_size; i++) {
-					//printf("%c", item[i]);
-					if (index == bufferSize) {
-						ESP_LOGE(TAG, "buffer overflow. index=%d bufferSize=%d", index, bufferSize);
-						while (1) { vTaskDelay(1); }
-					}
-					buffer[index] = item[i];
-					index++;
-					buffer[index] = 0;
-				}
-				//printf("\n");
-				//Return Item
-				vRingbufferReturnItem(xRingbuffer, (void *)item);
-			} else {
-				//Failed to receive item
-				ESP_LOGD(TAG, "End of receive item");
-				break;
-			}
-		}
-		ESP_LOGI(TAG, "buffer=\n%s", buffer);
-
-		// Parse XML
-        XML_Parser parser = XML_ParserCreate(NULL);
-        XML_SetUserData(parser, userData);
-        XML_SetElementHandler(parser, start_element, end_element);
-        XML_SetCharacterDataHandler(parser, data_handler);
-        if (XML_Parse(parser, buffer, bufferSize, 1) != XML_STATUS_OK) {
-            ESP_LOGE(TAG, "XML_Parse fail");
-        }
-		XML_ParserFree(parser);
-
-		free(buffer);
-
+		ESP_LOGD(TAG, "\n%s", response_buffer);
 	} else {
-		ESP_LOGE(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
-		while(1) {
-			vTaskDelay(2000 / portTICK_PERIOD_MS);
-		}
+		ESP_LOGW(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
 	}
 	esp_http_client_cleanup(client);
+	return err;
+}
+
+
+
+void http_client_get_user(char * url, user_data_t * userData)
+{
+	// Get content length from event handler
+	size_t content_length;
+	while (1) {
+		content_length = http_client_content_length(url);
+		ESP_LOGI(TAG, "content_length=%d", content_length);
+		if (content_length > 0) break;
+		vTaskDelay(100);
+	}
+
+	// Allocate buffer to store response of http request from event handler
+	char *response_buffer;
+	response_buffer = (char *) malloc(content_length+1);
+	if (response_buffer == NULL) {
+		ESP_LOGE(TAG, "Failed to allocate memory for output buffer");
+		while(1) {
+			vTaskDelay(1);
+		}
+	}
+	bzero(response_buffer, content_length+1);
+
+	// Get content from event handler
+	while(1) {
+		esp_err_t err = http_client_content_get(url, response_buffer);
+		if (err == ESP_OK) break;
+		vTaskDelay(100);
+	}
+	ESP_LOGI(TAG, "content_length=%d", content_length);
+	ESP_LOGI(TAG, "\n[%s]", response_buffer);
+
+	// Parse XML
+	XML_Parser parser = XML_ParserCreate(NULL);
+	XML_SetUserData(parser, userData);
+	XML_SetElementHandler(parser, start_element, end_element);
+	XML_SetCharacterDataHandler(parser, data_handler);
+	if (XML_Parse(parser, response_buffer, content_length, 1) != XML_STATUS_OK) {
+		ESP_LOGE(TAG, "XML_Parse fail");
+		while(1) {
+			vTaskDelay(1);
+		}
+	}
+	XML_ParserFree(parser);
+	free(response_buffer);
 }
 
 void view1(TFT_t *dev, FontxFile *fx, int fd, user_data_t userData, uint8_t fontWidth, uint8_t fontHeight)
@@ -464,18 +507,65 @@ void view2(TFT_t *dev, FontxFile *fx, int fd, user_data_t userData, uint8_t font
 void tft(void *pvParameters)
 {
 	// Get Weather Information
-	ESP_LOGI(pcTaskGetTaskName(0), "location=%d",EXAMPLE_ESP_LOCATION);
+	ESP_LOGI(pcTaskGetTaskName(0), "location=%d",ESP_LOCATION);
 	char url[64];
 	//https://rss-weather.yahoo.co.jp/rss/days/5110.xml
-	sprintf(url, "https://rss-weather.yahoo.co.jp/rss/days/%d.xml", EXAMPLE_ESP_LOCATION);
+	sprintf(url, "https://rss-weather.yahoo.co.jp/rss/days/%d.xml", ESP_LOCATION);
 	ESP_LOGI(pcTaskGetTaskName(0), "url=%s",url);
 	user_data_t userData;
 	userData.depth = 0;
 	memset(userData.tag, 0, sizeof(userData.tag));
 	userData.titleIndex = 0;
 	userData.descriptionIndex = 0;
-	http_client_get(url, &userData);
-	ESP_LOGI(TAG, "title=[%s]", userData.title);
+
+	// Read the content from the WEB and set it to userData
+	http_client_get_user(url, &userData);
+
+#if 0
+	// Get content length
+	size_t content_length;
+	while (1) {
+		content_length = http_client_content_length(url);
+		ESP_LOGI(TAG, "content_length=%d", content_length);
+		if (content_length > 0) break;
+		vTaskDelay(100);
+	}
+
+	char *response_buffer;	// Buffer to store response of http request from event handler
+	response_buffer = (char *) malloc(content_length+1);
+	if (response_buffer == NULL) {
+		ESP_LOGE(TAG, "Failed to allocate memory for output buffer");
+		while(1) {
+			vTaskDelay(1);
+		}
+	}
+	bzero(response_buffer, content_length+1);
+
+	// Get content
+	while(1) {
+		esp_err_t err = http_client_content_get(url, response_buffer);
+		if (err == ESP_OK) break;
+		vTaskDelay(100);
+	}
+	ESP_LOGI(TAG, "content_length=%d", content_length);
+	ESP_LOGI(TAG, "\n[%s]", response_buffer);
+
+	// Parse XML
+	XML_Parser parser = XML_ParserCreate(NULL);
+	XML_SetUserData(parser, &userData);
+	XML_SetElementHandler(parser, start_element, end_element);
+	XML_SetCharacterDataHandler(parser, data_handler);
+	if (XML_Parse(parser, response_buffer, content_length, 1) != XML_STATUS_OK) {
+		ESP_LOGE(TAG, "XML_Parse fail");
+		while(1) {
+			vTaskDelay(1);
+		}
+	}
+	XML_ParserFree(parser);
+
+	free(response_buffer);
+#endif
+
 	for(int i=0; i<8; i++) {
 		ESP_LOGI(TAG, "daily[%d] title=[%s]", i, userData.daily[i].title);
 		ESP_LOGI(TAG, "daily[%d] description=[%s]", i, userData.daily[i].description);
@@ -551,7 +641,8 @@ void tft(void *pvParameters)
 			memset(userData.tag, 0, sizeof(userData.tag));
 			userData.titleIndex = 0;
 			userData.descriptionIndex = 0;
-			http_client_get(url, &userData);
+			// Read the content from the WEB and set it to userData
+			http_client_get_user(url, &userData);
 			view1(&dev, fx, fd, userData, fontWidth, fontHeight);
 		}
 	}
@@ -625,7 +716,7 @@ void app_main()
 	ESP_ERROR_CHECK(ret);
 
 	// Initialize WiFi
-	if (wifi_init_sta(EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_MAXIMUM_RETRY) != ESP_OK) {
+	if (wifi_init_sta(ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_MAXIMUM_RETRY) != ESP_OK) {
 		ESP_LOGE(TAG, "Connection failed");
 		while(1) { vTaskDelay(1); }
 	}
@@ -637,10 +728,6 @@ void app_main()
 		ESP_LOGE(TAG, "SPIFFS mount failed");
 		while(1) { vTaskDelay(1); }
 	}
-
-	// Create No Split Ring Buffer 
-	xRingbuffer = xRingbufferCreate(1024*10, RINGBUF_TYPE_NOSPLIT);
-	configASSERT( xRingbuffer );
 
 	// Create Queue
 	xQueueCmd = xQueueCreate( 10, sizeof(CMD_t) );
