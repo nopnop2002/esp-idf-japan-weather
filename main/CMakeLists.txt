@@ -1,7 +1,12 @@
-set(COMPONENT_SRCS main.c ili9340.c fontx.c m5stack.c)
-set(COMPONENT_ADD_INCLUDEDIRS ".")
+set(srcs "main.c"
+    "ili9340"
+    "fontx.c"
+    "m5stack.c"
+    )
 
-register_component()
+idf_component_register(SRCS ${srcs}
+    INCLUDE_DIRS "."
+    EMBED_TXTFILES weather_yahoo_cert.pem)
 
 # Create a SPIFFS image from the contents of the 'fonts' directory
 # that fits the partition named 'storage'. FLASH_IN_PROJECT indicates that
