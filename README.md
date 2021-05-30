@@ -75,7 +75,8 @@ M5Stackの右ボタンを押すとRSSからデータを再度取得します。
 ---
 
 # Font File   
-[こちら](https://ipafont.ipa.go.jp/old/ipafont/download.html)で公開されているFONTX形式のフォントファイルを使っています。   
+[こちら](http://ayati.cocolog-nifty.com/blog/2012/08/index.html)で公開されているFONTX形式のフォントファイル(ILFONT03.zip)を使っています。   
+オリジナルのフォントはIPA(文字情報技術促進協議会)が公開しているIPAexフォントです。   
 漢字コードはSJISです。   
 
 ---
