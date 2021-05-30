@@ -11,20 +11,21 @@ M5Stack
 
 ---
 
-# Install
+# Installation
 
 ```
 git clone https://github.com/nopnop2002/esp-idf-japan-weather
 cd esp-idf-japan-weather
 chmod 777 getpem.sh
 ./getpem.sh
-make menuconfig
-make flash monitor
+idf.py se-target esp32
+idf.py menuconfig
+idf.py flash monitor
 ```
 
 ---
 
-# Firmware configuration
+# Configuration
 menuconfigを使用してこれらを設定する必要があります。   
 
 - CONFIG_ESP_WIFI_SSID   
