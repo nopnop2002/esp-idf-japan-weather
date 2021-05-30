@@ -18,7 +18,7 @@ git clone https://github.com/nopnop2002/esp-idf-japan-weather
 cd esp-idf-japan-weather
 chmod 777 getpem.sh
 ./getpem.sh
-idf.py se-target esp32
+idf.py set-target esp32
 idf.py menuconfig
 idf.py flash monitor
 ```
