@@ -4,6 +4,14 @@ M5Stackに[Yahoo Japan](https://weather.yahoo.co.jp/weather/rss/)が提供する天気予
 
 ![Gothic-1](https://user-images.githubusercontent.com/6020549/89112965-b33c7e80-d4a5-11ea-9073-dc72e9c05fb3.JPG)
 
+
+__Yahoo Japanが提供する天気予報サイトは２０２２年３月末で提供を終了しました__
+
+[こちら](https://www.metaweather.com/api/)のサイトでは、JSON形式で天気予報を提供していますが、内容が英語です。
+日本語の天気予報サイトが欲しいです。
+ご存知の方はIssuesで教えてください。
+
+
 ---
 
 # Hardware requirements
