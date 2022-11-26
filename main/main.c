@@ -20,6 +20,8 @@
 #include "esp_wifi.h"
 #include "esp_vfs.h"
 #include "esp_spiffs.h"
+#include "esp_sntp.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 
 #include "cmd.h"
@@ -201,11 +203,58 @@ esp_err_t SPIFFS_Mount(char * path, char * label, int max_files) {
 	return ret;
 }
 
+void time_sync_notification_cb(struct timeval *tv)
+{
+	ESP_LOGI(TAG, "Notification of a time synchronization event");
+}
+
+static void initialize_sntp(void)
+{
+	ESP_LOGI(TAG, "Initializing SNTP");
+	sntp_setoperatingmode(SNTP_OPMODE_POLL);
+	sntp_setservername(0, "pool.ntp.org");
+	sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+	sntp_init();
+}
+
+static esp_err_t obtain_time(void)
+{
+	initialize_sntp();
+	// wait for time to be set
+	int retry = 0;
+	const int retry_count = 10;
+	while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
+		ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+		vTaskDelay(2000 / portTICK_PERIOD_MS);
+	}
+
+	if (retry == retry_count) return ESP_FAIL;
+	return ESP_OK;
+}
+
+static void periodic_timer_callback(void* arg)
+{
+#if 0
+	int64_t time_since_boot = esp_timer_get_time();
+	ESP_LOGI(TAG, "Periodic timer called, time since boot: %lld us", time_since_boot);
+#endif
+
+	time_t now;
+	struct tm timeinfo;
+	char strftime_buf[64];
+	time(&now);
+	now = now + (9*60*60);
+	localtime_r(&now, &timeinfo);
+	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+	ESP_LOGI(TAG, "The current date/time is: %s", strftime_buf);
+	ESP_LOGI(TAG, "timeinfo.tm_hour=%d", timeinfo.tm_hour);
+	ESP_LOGI(TAG, "timeinfo.tm_min=%d", timeinfo.tm_min);
+	if (timeinfo.tm_min == 0) esp_restart();
+}
+
+
 void app_main()
 {
-	esp_log_level_set(TAG, ESP_LOG_INFO); 
-	//esp_log_level_set(TAG, ESP_LOG_DEBUG); 
-
 	// Initialize NVS
 	esp_err_t ret = nvs_flash_init();
 	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -214,6 +263,14 @@ void app_main()
 	}
 	ESP_ERROR_CHECK(ret);
 
+	// Initialize SPIFFS
+	ESP_LOGI(TAG, "Initializing SPIFFS");
+	if (SPIFFS_Mount("/font", "storage", 7) != ESP_OK)
+	{
+		ESP_LOGE(TAG, "SPIFFS mount failed");
+		while(1) { vTaskDelay(1); }
+	}
+
 	// Initialize WiFi
 	ESP_LOGI(TAG, "Initializing WiFi");
 	if (wifi_init_sta() != ESP_OK) {
@@ -221,13 +278,33 @@ void app_main()
 		while(1) { vTaskDelay(1); }
 	}
 	
-	// Initialize SPIFFS
-	ESP_LOGI(TAG, "Initializing SPIFFS");
-	if (SPIFFS_Mount("/fonts", "storage", 7) != ESP_OK)
-	{
-		ESP_LOGE(TAG, "SPIFFS mount failed");
-		while(1) { vTaskDelay(1); }
+	// obtain time over NTP
+	ret = obtain_time();
+	if(ret != ESP_OK) {
+		ESP_LOGE(TAG, "Fail to getting time over NTP.");
+		return;
 	}
+
+	// update 'now' variable with current time
+	time_t now;
+	struct tm timeinfo;
+	char strftime_buf[64];
+	time(&now);
+	now = now + (9*60*60);
+	localtime_r(&now, &timeinfo);
+	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+	ESP_LOGI(TAG, "The current date/time is: %s", strftime_buf);
+
+	// a periodic timer which will run every 60s, and print a message
+	const esp_timer_create_args_t periodic_timer_args = {
+			.callback = &periodic_timer_callback,
+			/* name is optional, but may help identify the timer when debugging */
+			.name = "periodic"
+	};
+
+	esp_timer_handle_t periodic_timer;
+	ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+	ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 60000000));
 
 	// Create Queue
 	xQueueCmd = xQueueCreate( 10, sizeof(CMD_t) );
@@ -237,5 +314,5 @@ void app_main()
 	xTaskCreate(buttonA, "BUTTON1", 1024*2, NULL, 2, NULL);
 	xTaskCreate(buttonB, "BUTTON2", 1024*2, NULL, 2, NULL);
 	xTaskCreate(buttonC, "BUTTON3", 1024*2, NULL, 2, NULL);
-	xTaskCreate(tft, "TFT", 1024*8, NULL, 5, NULL);
+	xTaskCreate(tft, "TFT", 1024*10, NULL, 5, NULL);
 }

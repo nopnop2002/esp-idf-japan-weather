@@ -1,23 +1,19 @@
 # esp-idf-japan-weather
 Display the Japanese weather on M5Stack.   
-M5Stackに[Yahoo Japan](https://weather.yahoo.co.jp/weather/rss/)が提供する天気予報を表示します。   
+M5Stackに週間天気予報を表示します。   
 
-![Gothic-1](https://user-images.githubusercontent.com/6020549/89112965-b33c7e80-d4a5-11ea-9073-dc72e9c05fb3.JPG)
-
-
-__Yahoo Japanが提供する天気予報サイトは２０２２年３月末で提供を終了しました__
-
-[こちら](https://www.metaweather.com/api/)のサイトでは、JSON形式で天気予報を提供していますが、内容が英語です。   
-日本語で情報を提供してくれる天気予報サイトが欲しいです。   
-ご存知の方はIssuesで教えてください。   
+![screen](https://user-images.githubusercontent.com/6020549/204073294-3b156449-15d1-4385-9a6a-83b627e464c8.JPG)
 
 
----
+Yahoo Japanが提供する天気予報サイトは2022年3月末で提供を終了しました。   
+そこで、[こちら](https://api.aoikujira.com/index.php?tenki)のサイトから週間天気予報を取り出しています。   
+このサイトもいつまで天気予報を提供してくれるか分かりません。   
+気象庁が天気予報をJSON形式で提供していますが、3日分しかありません。   
+精度は高くなくていいので、週間天気予報が欲しいです。   
 
 # Hardware requirements
-M5Stack
+M5Stack   
 
----
 
 # Installation
 
@@ -31,7 +27,6 @@ idf.py menuconfig
 idf.py flash monitor
 ```
 
----
 
 # Configuration
 menuconfigを使用してこれらを設定する必要があります。   
@@ -43,45 +38,23 @@ Wifiのパスワード
 - CONFIG_ESP_MAXIMUM_RETRY   
 Wi-Fiに接続するときの最大再試行回数
 - CONFIG_ESP_LOCATION   
-[こちら](https://weather.yahoo.co.jp/weather/rss/)のページから地域を選び、表示されるURLの末尾の番号を指定します。   
-例えば愛知県名古屋市の場合   
-https://rss-weather.yahoo.co.jp/rss/days/5110.xml
-なので、5110を設定します。   
+対象の地域
 - CONFIG_ESP_FONT   
 使用するフォント
 
-![menuconfig-1](https://user-images.githubusercontent.com/6020549/89112941-753f5a80-d4a5-11ea-804b-29ca13a7c793.jpg)
-![menuconfig-2](https://user-images.githubusercontent.com/6020549/89112942-76708780-d4a5-11ea-89d6-559b30ecd3a8.jpg)
+![config-1](https://user-images.githubusercontent.com/6020549/204073332-f5ce6734-1a55-4abc-84d5-007c4e62b177.jpg)
+![config-2](https://user-images.githubusercontent.com/6020549/204073334-c0f52ba4-3756-470f-a90e-714f33f39362.jpg)
+![config-3](https://user-images.githubusercontent.com/6020549/204073342-2a154bd6-16c4-4f35-a826-17197c1ac5a6.jpg)
+![config-4](https://user-images.githubusercontent.com/6020549/204073343-d4885877-812c-4bfa-974c-1dbe6790b39b.jpg)
 
----
 
 # Operation
+左ボタンを押すと再起動します。   
+毎時０分に再起動して情報を更新します。   
 
-## View1
-初期表示   
-M5Stackの左ボタンを押すとこの表示になります。   
-上：Gothicフォント　下：Mincyoフォント   
+# JSON Library   
+ESP-IDE標準のSONライブラリを使用しています。   
 
-![Gothic-1](https://user-images.githubusercontent.com/6020549/89112965-b33c7e80-d4a5-11ea-9073-dc72e9c05fb3.JPG)
-![Mincyo-1](https://user-images.githubusercontent.com/6020549/89112966-b59ed880-d4a5-11ea-8e0f-59491781d64d.JPG)
-
-## View2
-M5Stackの真ん中のボタンを押すとこの表示になります。   
-上：Gothicフォント　下：Mincyoフォント   
-
-![Gothic-2](https://user-images.githubusercontent.com/6020549/89112975-d0714d00-d4a5-11ea-9292-a207a8839244.JPG)
-![Mincyo-2](https://user-images.githubusercontent.com/6020549/89112976-d1a27a00-d4a5-11ea-98f3-987cafd4a648.JPG)
-
-## Update
-M5Stackの右ボタンを押すとRSSからデータを再度取得します。
-
----
-
-# XML Parser   
-[こちら](https://libexpat.github.io/)のライブラリを使用しています。   
-このライブラリはesp-idf標準ライブラリです。   
-
----
 
 # Font File   
 [こちら](http://ayati.cocolog-nifty.com/blog/2012/08/index.html)で公開されているFONTX形式のフォントファイル(ILFONT03.zip)を使っています。   
@@ -89,10 +62,10 @@ M5Stackの右ボタンを押すとRSSからデータを再度取得します。
 ライセンスはIPAフォントのライセンスに従います。   
 漢字コードはSJISです。   
 
----
 
 # Convert from UTF8 to SJIS   
-Yahoo JapanのRSSでは文字コードにUTF8が使われています。   
-[こちら](https://www.mgo-tec.com/blog-entry-utf8sjis01.html)で公開されている変換テーブル(Utf8Sjis.tbl)を使って、
-UTF8からSJISに変換しています。
+天気予報サイトの文字コードにはUTF8が使われています。   
+フォントファイルにはSJISのコードでフォントが格納されています。   
+そこで、[こちら](https://www.mgo-tec.com/blog-entry-utf8sjis01.html)で公開されている変換テーブル(Utf8Sjis.tbl)を使って、
+UTF8からSJISにコードを変換し、変換結果のSJISコードを使ってフォントを取り出しています。   
 

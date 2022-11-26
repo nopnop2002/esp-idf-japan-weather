@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <inttypes.h>
 #include <string.h>
 #include <math.h>
 
@@ -8,39 +10,59 @@
 #include <driver/gpio.h>
 #include "esp_log.h"
 
-#include "ili9340.h"
+#include "ili9340_sjis.h"
 
-#define TAG			"ILI9340"
-#define	_DEBUG_		0
+#define TAG "ILI9340"
+#define	_DEBUG_ 0
 
-static const int GPIO_MOSI = 23;
-static const int GPIO_SCLK = 18;
+#if CONFIG_SPI2_HOST
+#define HOST_ID SPI2_HOST
+#elif CONFIG_SPI3_HOST
+#define HOST_ID SPI3_HOST
+#else
+#define HOST_ID SPI2_HOST // When not to use menuconfig
+#endif
+
+
+//static const int GPIO_MOSI = 23;
+//static const int GPIO_SCLK = 18;
 
 static const int SPI_Command_Mode = 0;
 static const int SPI_Data_Mode = 1;
-//static const int SPI_Frequency = SPI_MASTER_FREQ_20M;
-////static const int SPI_Frequency = SPI_MASTER_FREQ_26M;
-static const int SPI_Frequency = SPI_MASTER_FREQ_40M;
-////static const int SPI_Frequency = SPI_MASTER_FREQ_80M;
+//static const int TFT_Frequency = SPI_MASTER_FREQ_20M;
+////static const int TFT_Frequency = SPI_MASTER_FREQ_26M;
+static const int TFT_Frequency = SPI_MASTER_FREQ_40M;
+////static const int TFT_Frequency = SPI_MASTER_FREQ_80M;
+
+#if CONFIG_XPT2046
+static const int XPT_Frequency = 1*1000*1000;
+//static const int XPT_Frequency = 2*1000*1000;
+//static const int XPT_Frequency = 4*1000*1000;
+
+//#define GPIO_MISO 19
+//#define XPT_CS	4
+//#define XPT_IRQ 5
+#endif
 
 
-void spi_master_init(TFT_t * dev, int16_t GPIO_CS, int16_t GPIO_DC, int16_t GPIO_RESET, int16_t GPIO_BL)
+void spi_master_init(TFT_t * dev, int16_t GPIO_MOSI, int16_t GPIO_SCLK, int16_t TFT_CS, int16_t GPIO_DC, int16_t GPIO_RESET, int16_t GPIO_BL)
 {
 	esp_err_t ret;
 
-	ESP_LOGI(TAG, "GPIO_CS=%d",GPIO_CS);
-	gpio_pad_select_gpio( GPIO_CS );
-	gpio_set_direction( GPIO_CS, GPIO_MODE_OUTPUT );
-	gpio_set_level( GPIO_CS, 0 );
+	ESP_LOGI(TAG, "TFT_CS=%d",TFT_CS);
+	gpio_reset_pin( TFT_CS );
+	gpio_set_direction( TFT_CS, GPIO_MODE_OUTPUT );
+	//gpio_set_level( TFT_CS, 0 );
+	gpio_set_level( TFT_CS, 1 );
 
 	ESP_LOGI(TAG, "GPIO_DC=%d",GPIO_DC);
-	gpio_pad_select_gpio( GPIO_DC );
+	gpio_reset_pin( GPIO_DC );
 	gpio_set_direction( GPIO_DC, GPIO_MODE_OUTPUT );
 	gpio_set_level( GPIO_DC, 0 );
 
 	ESP_LOGI(TAG, "GPIO_RESET=%d",GPIO_RESET);
 	if ( GPIO_RESET >= 0 ) {
-		gpio_pad_select_gpio( GPIO_RESET );
+		gpio_reset_pin( GPIO_RESET );
 		gpio_set_direction( GPIO_RESET, GPIO_MODE_OUTPUT );
 		gpio_set_level( GPIO_RESET, 0 );
 		vTaskDelay( pdMS_TO_TICKS( 100 ) );
@@ -49,11 +71,20 @@ void spi_master_init(TFT_t * dev, int16_t GPIO_CS, int16_t GPIO_DC, int16_t GPIO
 
 	ESP_LOGI(TAG, "GPIO_BL=%d",GPIO_BL);
 	if ( GPIO_BL >= 0 ) {
-		gpio_pad_select_gpio( GPIO_BL );
+		gpio_reset_pin( GPIO_BL );
 		gpio_set_direction( GPIO_BL, GPIO_MODE_OUTPUT );
 		gpio_set_level( GPIO_BL, 0 );
 	}
 
+#if CONFIG_XPT2046
+	spi_bus_config_t buscfg = {
+		.sclk_io_num = GPIO_SCLK,
+		.mosi_io_num = GPIO_MOSI,
+		.miso_io_num = GPIO_MISO,
+		.quadwp_io_num = -1,
+		.quadhd_io_num = -1
+	};
+#else
 	spi_bus_config_t buscfg = {
 		.sclk_io_num = GPIO_SCLK,
 		.mosi_io_num = GPIO_MOSI,
@@ -61,27 +92,60 @@ void spi_master_init(TFT_t * dev, int16_t GPIO_CS, int16_t GPIO_DC, int16_t GPIO
 		.quadwp_io_num = -1,
 		.quadhd_io_num = -1
 	};
+#endif
 
-	ret = spi_bus_initialize( HSPI_HOST, &buscfg, 1 );
+	ret = spi_bus_initialize( HOST_ID, &buscfg, SPI_DMA_CH_AUTO );
 	ESP_LOGD(TAG, "spi_bus_initialize=%d",ret);
 	assert(ret==ESP_OK);
 
-	spi_device_interface_config_t devcfg={
-		.clock_speed_hz = SPI_Frequency,
-		.spics_io_num = GPIO_CS,
+	spi_device_interface_config_t tft_devcfg={
+		.clock_speed_hz = TFT_Frequency,
+		.spics_io_num = TFT_CS,
 		.queue_size = 7,
 		.flags = SPI_DEVICE_NO_DUMMY,
 	};
 
-	spi_device_handle_t handle;
-	ret = spi_bus_add_device( HSPI_HOST, &devcfg, &handle);
+	spi_device_handle_t tft_handle;
+	ret = spi_bus_add_device( HOST_ID, &tft_devcfg, &tft_handle);
 	ESP_LOGD(TAG, "spi_bus_add_device=%d",ret);
 	assert(ret==ESP_OK);
 	dev->_dc = GPIO_DC;
 	dev->_bl = GPIO_BL;
-	dev->_SPIHandle = handle;
-}
+	dev->_TFT_Handle = tft_handle;
 
+#if CONFIG_XPT2046
+	ESP_LOGI(TAG, "XPT_CS=%d",XPT_CS);
+	gpio_reset_pin( XPT_CS );
+	gpio_set_direction( XPT_CS, GPIO_MODE_OUTPUT );
+	gpio_set_level( XPT_CS, 1 );
+
+	// set the IRQ as a input
+	ESP_LOGI(TAG, "XPT_IRQ=%d",XPT_IRQ);
+	gpio_config_t io_conf = {};
+	io_conf.intr_type = GPIO_INTR_DISABLE;
+	io_conf.pin_bit_mask = (1ULL<<XPT_IRQ);
+	io_conf.mode = GPIO_MODE_INPUT;
+	io_conf.pull_up_en = 1;
+	gpio_config(&io_conf);
+	//gpio_reset_pin( XPT_IRQ );
+	//gpio_set_direction( XPT_IRQ, GPIO_MODE_DEF_INPUT );
+
+	spi_device_interface_config_t xpt_devcfg={
+		.clock_speed_hz = XPT_Frequency,
+		.spics_io_num = XPT_CS,
+		.queue_size = 7,
+		.flags = SPI_DEVICE_NO_DUMMY,
+	};
+
+	spi_device_handle_t xpt_handle;
+	ret = spi_bus_add_device( HOST_ID, &xpt_devcfg, &xpt_handle);
+	ESP_LOGD(TAG, "spi_bus_add_device=%d",ret);
+	assert(ret==ESP_OK);
+	dev->_XPT_Handle = xpt_handle;
+	dev->_irq = XPT_IRQ;
+	dev->_calibration = true;
+#endif
+}
 
 bool spi_master_write_byte(spi_device_handle_t SPIHandle, const uint8_t* Data, size_t DataLength)
 {
@@ -109,7 +173,7 @@ bool spi_master_write_comm_byte(TFT_t * dev, uint8_t cmd)
 	static uint8_t Byte = 0;
 	Byte = cmd;
 	gpio_set_level( dev->_dc, SPI_Command_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, &Byte, 1 );
+	return spi_master_write_byte( dev->_TFT_Handle, &Byte, 1 );
 }
 
 bool spi_master_write_comm_word(TFT_t * dev, uint16_t cmd)
@@ -118,7 +182,7 @@ bool spi_master_write_comm_word(TFT_t * dev, uint16_t cmd)
 	Byte[0] = (cmd >> 8) & 0xFF;
 	Byte[1] = cmd & 0xFF;
 	gpio_set_level( dev->_dc, SPI_Command_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, Byte, 2 );
+	return spi_master_write_byte( dev->_TFT_Handle, Byte, 2 );
 }
 
 
@@ -127,7 +191,7 @@ bool spi_master_write_data_byte(TFT_t * dev, uint8_t data)
 	static uint8_t Byte = 0;
 	Byte = data;
 	gpio_set_level( dev->_dc, SPI_Data_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, &Byte, 1 );
+	return spi_master_write_byte( dev->_TFT_Handle, &Byte, 1 );
 }
 
 
@@ -137,7 +201,7 @@ bool spi_master_write_data_word(TFT_t * dev, uint16_t data)
 	Byte[0] = (data >> 8) & 0xFF;
 	Byte[1] = data & 0xFF;
 	gpio_set_level( dev->_dc, SPI_Data_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, Byte, 2);
+	return spi_master_write_byte( dev->_TFT_Handle, Byte, 2);
 }
 
 bool spi_master_write_addr(TFT_t * dev, uint16_t addr1, uint16_t addr2)
@@ -148,7 +212,7 @@ bool spi_master_write_addr(TFT_t * dev, uint16_t addr1, uint16_t addr2)
 	Byte[2] = (addr2 >> 8) & 0xFF;
 	Byte[3] = addr2 & 0xFF;
 	gpio_set_level( dev->_dc, SPI_Data_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, Byte, 4);
+	return spi_master_write_byte( dev->_TFT_Handle, Byte, 4);
 }
 
 bool spi_master_write_color(TFT_t * dev, uint16_t color, uint16_t size)
@@ -160,7 +224,7 @@ bool spi_master_write_color(TFT_t * dev, uint16_t color, uint16_t size)
 		Byte[index++] = color & 0xFF;
 	}
 	gpio_set_level( dev->_dc, SPI_Data_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, Byte, size*2);
+	return spi_master_write_byte( dev->_TFT_Handle, Byte, size*2);
 }
 
 // Add 202001
@@ -173,14 +237,14 @@ bool spi_master_write_colors(TFT_t * dev, uint16_t * colors, uint16_t size)
 		Byte[index++] = colors[i] & 0xFF;
 	}
 	gpio_set_level( dev->_dc, SPI_Data_Mode );
-	return spi_master_write_byte( dev->_SPIHandle, Byte, size*2);
+	return spi_master_write_byte( dev->_TFT_Handle, Byte, size*2);
 }
 
 
 void delayMS(int ms) {
 	int _ms = ms + (portTICK_PERIOD_MS - 1);
 	TickType_t xTicksToDelay = _ms / portTICK_PERIOD_MS;
-	ESP_LOGD(TAG, "ms=%d _ms=%d portTICK_PERIOD_MS=%d xTicksToDelay=%d",ms,_ms,portTICK_PERIOD_MS,xTicksToDelay);
+	ESP_LOGD(TAG, "ms=%d _ms=%d portTICK_PERIOD_MS=%"PRIu32" xTicksToDelay=%"PRIu32,ms,_ms,portTICK_PERIOD_MS,xTicksToDelay);
 	vTaskDelay(xTicksToDelay);
 }
 
@@ -911,7 +975,8 @@ uint16_t rgb565_conv(uint16_t r,uint16_t g,uint16_t b) {
 // y:Y coordinate
 // ascii: ascii code(8 bits)
 // color:color
-int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t ascii, uint16_t color) {
+//int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t ascii, uint16_t color) {
+int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint16_t ascii, uint16_t color) {
 	uint16_t xx,yy,bit,ofs;
 	unsigned char fonts[128]; // font pattern
 	unsigned char pw, ph;
@@ -925,19 +990,19 @@ int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t asc
 	if(_DEBUG_)printf("GetFontx rc=%d pw=%d ph=%d\n",rc,pw,ph);
 	if (!rc) return 0;
 
-	uint16_t xd1 = 0;
-	uint16_t yd1 = 0;
-	uint16_t xd2 = 0;
-	uint16_t yd2 = 0;
-	uint16_t xss = 0;
-	uint16_t yss = 0;
-	uint16_t xsd = 0;
-	uint16_t ysd = 0;
-	int next = 0;
-	uint16_t x0  = 0;
-	uint16_t x1  = 0;
-	uint16_t y0  = 0;
-	uint16_t y1  = 0;
+	int16_t xd1 = 0;
+	int16_t yd1 = 0;
+	int16_t xd2 = 0;
+	int16_t yd2 = 0;
+	int16_t xss = 0;
+	int16_t yss = 0;
+	int16_t xsd = 0;
+	int16_t ysd = 0;
+	int16_t next = 0;
+	int16_t xf0 = 0;
+	int16_t xf1 = 0;
+	int16_t yf0 = 0;
+	int16_t yf1 = 0;
 	if (dev->_font_direction == 0) {
 		xd1 = +1;
 		yd1 = +1; //-1;
@@ -949,10 +1014,10 @@ int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t asc
 		ysd =  0;
 		next = x + pw;
 
-		x0 = x;
-		y0 = y - (ph-1);
-		x1 = x + (pw-1);
-		y1 = y;
+		xf0 =  x;
+		yf0 =  y - (ph-1);
+		xf1 =  x + (pw-1);
+		yf1 =  y;
 	} else if (dev->_font_direction == 2) {
 		xd1 = -1;
 		yd1 = -1; //+1;
@@ -964,10 +1029,10 @@ int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t asc
 		ysd =  0;
 		next = x - pw;
 
-		x0 = x - (pw-1);
-		y0 = y;
-		x1 = x;
-		y1 = y + (ph-1);
+		xf0 =  x - (pw-1);
+		yf0 =  y;
+		xf1 =  x;
+		yf1 =  y + (ph-1);
 	} else if (dev->_font_direction == 1) {
 		xd1 =  0;
 		yd1 =  0;
@@ -979,10 +1044,10 @@ int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t asc
 		ysd =  1;
 		next = y + pw; //y - pw;
 
-		x0 = x;
-		y0 = y;
-		x1 = x + (ph-1);
-		y1 = y + (pw-1);
+		xf0 =  x;
+		yf0 =  y;
+		xf1 =  x + (ph-1);
+		yf1 =  y + (pw-1);
 	} else if (dev->_font_direction == 3) {
 		xd1 =  0;
 		yd1 =  0;
@@ -994,13 +1059,13 @@ int lcdDrawChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint8_t asc
 		ysd =  1;
 		next = y - pw; //y + pw;
 
-		x0 = x - (ph-1);
-		y0 = y - (pw-1);
-		x1 = x;
-		y1 = y;
+		xf0 =  x - (ph-1);
+		yf0 =  y - (pw-1);
+		xf1 =  x;
+		yf1 =  y;
 	}
 
-	if (dev->_font_fill) lcdDrawFillRect(dev, x0, y0, x1, y1, dev->_font_fill_color);
+	if (dev->_font_fill) lcdDrawFillRect(dev, xf0, yf0, xf1, yf1, dev->_font_fill_color);
 
 	int bits;
 	if(_DEBUG_)printf("xss=%d yss=%d\n",xss,yss);
@@ -1062,176 +1127,42 @@ int lcdDrawString(TFT_t * dev, FontxFile *fx, uint16_t x, uint16_t y, uint8_t * 
 	return 0;
 }
 
-
-// Draw SJIS character
-// x:X coordinate
-// y:Y coordinate
-// sjis: SJIS code(16 bits)
-// color:color
-int lcdDrawSJISChar(TFT_t * dev, FontxFile *fxs, uint16_t x, uint16_t y, uint16_t sjis, uint16_t color) {
-	uint16_t xx,yy,bit,ofs;
-	unsigned char fonts[128]; // font pattern
-	unsigned char pw, ph;
-	int h,w;
-	uint16_t mask;
-	bool rc;
-
-	if(_DEBUG_)printf("_font_direction=%d\n",dev->_font_direction);
-	rc = GetFontx(fxs, sjis, fonts, &pw, &ph); // SJIS -> Font pattern
-	if(_DEBUG_)printf("GetFontx rc=%d pw=%d ph=%d\n",rc,pw,ph);
-	if (!rc) return 0;
-
-	uint16_t xd1 = 0;
-	uint16_t yd1 = 0;
-	uint16_t xd2 = 0;
-	uint16_t yd2 = 0;
-	uint16_t xss = 0;
-	uint16_t yss = 0;
-	uint16_t xsd = 0;
-	uint16_t ysd = 0;
-	int next = 0;
-	uint16_t x0  = 0;
-	uint16_t x1  = 0;
-	uint16_t y0  = 0;
-	uint16_t y1  = 0;
-	if (dev->_font_direction == 0) {
-		xd1 = +1;
-		yd1 = +1;
-		xd2 =  0;
-		yd2 =  0;
-		xss =  x;
-		yss =  y - (ph - 1);
-		xsd =  1;
-		ysd =  0;
-		next = x + pw;
-
-		x0		= x;
-		y0		= y - (ph-1);
-		x1		= x + (pw-1);
-		y1		= y;
-	} else if (dev->_font_direction == 2) {
-		xd1 = -1;
-		yd1 = -1;
-		xd2 =  0;
-		yd2 =  0;
-		xss =  x;
-		yss =  y + ph + 1;
-		xsd =  1;
-		ysd =  0;
-		next = x - pw;
-
-		x0		= x - (pw-1);
-		y0		= y;
-		x1		= x;
-		y1		= y + (ph-1);
-	} else if (dev->_font_direction == 1) {
-		xd1 =  0;
-		yd1 =  0;
-		xd2 = -1;
-		yd2 = +1;
-		xss =  x + ph;
-		yss =  y;
-		xsd =  0;
-		ysd =  1;
-		next = y + pw;
-
-		x0		= x;
-		y0		= y;
-		x1		= x + (ph-1);
-		y1		= y + (pw-1);
-	} else if (dev->_font_direction == 3) {
-		xd1 =  0;
-		yd1 =  0;
-		xd2 = +1;
-		yd2 = -1;
-		xss =  x - (ph - 1);
-		yss =  y;
-		xsd =  0;
-		ysd =  1;
-		next = y - pw;
-
-		x0		= x - (ph-1);
-		y0		= y - (pw-1);
-		x1		= x;
-		y1		= y;
-	}
-
-	if (dev->_font_fill) lcdDrawFillRect(dev, x0, y0, x1, y1, dev->_font_fill_color);
-
-	int bits;
-	if(_DEBUG_)printf("xss=%d yss=%d xd1=%d yd1=%d\n",xss,yss,xd1,yd1);
-	ofs = 0;
-	yy = yss;
-	xx = xss;
-	for(h=0;h<ph;h++) {
-		if(xsd) xx = xss;
-		if(ysd) yy = yss;
-		//	  for(w=0;w<(pw/8);w++) {
-		bits = pw;
-		for(w=0;w<((pw+4)/8);w++) {
-			mask = 0x80;
-			for(bit=0;bit<8;bit++) {
-				bits--;
-				if (bits < 0) continue;
-				if(_DEBUG_)printf("xx=%d yy=%d mask=%02x fonts[%d]=%02x\n",xx,yy,mask,ofs,fonts[ofs]);
-				if (fonts[ofs] & mask) {
-					lcdDrawPixel(dev, xx, yy, color);
-				} else {
-					//if (dev->_font_fill) lcdDrawPixel(dev, xx, yy, dev->_font_fill_color);
-				}
-				if (h == (ph-2) && dev->_font_underline)
-					lcdDrawPixel(dev, xx, yy, dev->_font_underline_color);
-				if (h == (ph-1) && dev->_font_underline)
-					lcdDrawPixel(dev, xx, yy, dev->_font_underline_color);
-				xx = xx + xd1;
-				yy = yy + yd2;
-				mask = mask >> 1;
-			}
-			ofs++;
-		}
-		yy = yy + yd1;
-		xx = xx + xd2;
-	}
-
-	if (next < 0) next = 0;
-	return next;
-}
-
 // Draw UTF8 character
 // x:X coordinate
 // y:Y coordinate
-// utf8: UTF8 code
+// utf8:UTF8 code
 // color:color
-int lcdDrawUTF8Char(TFT_t * dev, FontxFile *fx, int fd, uint16_t x,uint16_t y,uint8_t *utf8, uint16_t color) {
+int lcdDrawUTF8Char(TFT_t * dev, FontxFile *fx, uint16_t x,uint16_t y,uint8_t *utf8, uint16_t color) {
 	uint16_t sjis[1];
 
-	sjis[0] = UTF2SJIS(fd, utf8);
+	sjis[0] = UTF2SJIS(utf8);
 	if(_DEBUG_)printf("sjis=%04x\n",sjis[0]);
-	return lcdDrawSJISChar(dev, fx, x, y, sjis[0], color);
+	return lcdDrawChar(dev, fx, x, y, sjis[0], color);
+
 }
 
 // Draw UTF8 string
 // x:X coordinate
 // y:Y coordinate
-// utfs: UTF8 string
+// utfs:UTF8 string
 // color:color
-int lcdDrawUTF8String(TFT_t * dev, FontxFile *fx, int fd, uint16_t x, uint16_t y, unsigned char *utfs, uint16_t color) {
+int lcdDrawUTF8String(TFT_t * dev, FontxFile *fx, uint16_t x, uint16_t y, unsigned char *utfs, uint16_t color) {
 
 	int i;
 	int spos;
 	uint16_t sjis[64];
-	spos = String2SJIS(fd, utfs, strlen((char *)utfs), sjis, 64);
+	spos = STR2SJIS(utfs, strlen((char *)utfs), sjis, 64);
 	if(_DEBUG_)printf("spos=%d\n",spos);
 	for(i=0;i<spos;i++) {
 		if(_DEBUG_)printf("x=%d y=%d sjis[%d]=%x\n",x, y, i, sjis[i]);
 		if (dev->_font_direction == 0)
-			x = lcdDrawSJISChar(dev, fx, x, y, sjis[i], color);
+			x = lcdDrawChar(dev, fx, x, y, sjis[i], color);
 		if (dev->_font_direction == 1)
-			y = lcdDrawSJISChar(dev, fx, x, y, sjis[i], color);
+			y = lcdDrawChar(dev, fx, x, y, sjis[i], color);
 		if (dev->_font_direction == 2)
-			x = lcdDrawSJISChar(dev, fx, x, y, sjis[i], color);
+			x = lcdDrawChar(dev, fx, x, y, sjis[i], color);
 		if (dev->_font_direction == 3)
-			y = lcdDrawSJISChar(dev, fx, x, y, sjis[i], color);
+			y = lcdDrawChar(dev, fx, x, y, sjis[i], color);
 	}
 	if (dev->_font_direction == 0) return x;
 	if (dev->_font_direction == 2) return x;

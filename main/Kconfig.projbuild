@@ -18,18 +18,60 @@ menu "Application Configuration"
 		help
 			Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
 
-	config ESP_LOCATION
-		int "Location ID"
-		default 5110
+	choice ESP_LOCATION
+		bool "Location ID"
+		default ESP_LOCATION_319
 		help
-			Set the Location ID of the place where you want the weather forecast.
+			Select the Location ID of the place where you want the weather forecast.
+		config ESP_LOCATION_304
+			bool "釧路"
+		config ESP_LOCATION_302
+			bool "旭川"
+		config ESP_LOCATION_306
+			bool "札幌"
+		config ESP_LOCATION_308
+			bool "青森"
+		config ESP_LOCATION_309
+			bool "秋田"
+		config ESP_LOCATION_312
+			bool "仙台"
+		config ESP_LOCATION_323
+			bool "新潟"
+		config ESP_LOCATION_325
+			bool "金沢"
+		config ESP_LOCATION_319
+			bool "東京"
+		config ESP_LOCATION_316
+			bool "宇都宮"
+		config ESP_LOCATION_322
+			bool "長野"
+		config ESP_LOCATION_329
+			bool "名古屋"
+		config ESP_LOCATION_331
+			bool "大阪"
+		config ESP_LOCATION_341
+			bool "高松"
+		config ESP_LOCATION_337
+			bool "松江"
+		config ESP_LOCATION_338
+			bool "広島"
+		config ESP_LOCATION_344
+			bool "高知"
+		config ESP_LOCATION_346
+			bool "福岡"
+		config ESP_LOCATION_352
+			bool "鹿児島"
+		config ESP_LOCATION_353
+			bool "那覇"
+		config ESP_LOCATION_356
+			bool "石垣"
+	endchoice
 
 	choice ESP_FONT
 		bool "Select font"
 		default ESP_FONT_GOTHIC
 		help
 			Select font.
-
 		config ESP_FONT_GOTHIC
 			bool "Gothic"
 		config ESP_FONT_MINCYO

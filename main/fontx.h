@@ -16,9 +16,9 @@ typedef struct {
 } FontxFile;
 
 void AaddFontx(FontxFile *fx, const char *path);
-void InitFontx(FontxFile *fxs, const char *f0, const char *f1);
 bool OpenFontx(FontxFile *fx);
 void CloseFontx(FontxFile *fx);
+void InitFontx(FontxFile *fxs, const char *f0, const char *f1);
 void DumpFontx(FontxFile *fxs);
 uint8_t getFortWidth(FontxFile *fx);
 uint8_t getFortHeight(FontxFile *fx);
@@ -32,8 +32,8 @@ uint8_t RotateByte(uint8_t ch);
 
 // UTF8 to SJIS table
 // https://www.mgo-tec.com/blog-entry-utf8sjis01.html
-#define UTF8toSJIS "Utf8Sjis.tbl"
-uint16_t UTF2SJIS(int fd, uint8_t *utf8);
-int String2SJIS(int fd, unsigned char *str_in, size_t stlen, uint16_t *sjis, size_t ssize);
+int initSJIS(char * table);
+uint16_t UTF2SJIS(uint8_t *utf8);
+int STR2SJIS(unsigned char *str_in, size_t stlen, uint16_t *sjis, size_t ssize);
 #endif /* MAIN_FONTX_H_ */
 
