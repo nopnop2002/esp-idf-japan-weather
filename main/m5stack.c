@@ -62,13 +62,12 @@ static const char *TAG = "M5STACK";
 	To embed it in the app binary, the PEM file is named
 	in the component.mk COMPONENT_EMBED_TXTFILES variable.
 */
-extern const char cert_pem_start[] asm("_binary_cert_pem_start");
-extern const char cert_pem_end[] asm("_binary_cert_pem_end");
+extern char cert_pem_start[] asm("_binary_cert_pem_start");
+extern char cert_pem_end[] asm("_binary_cert_pem_end");
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
-	static char *output_buffer;  // Buffer to store response of http request from event handler
-	static int output_len;		 // Stores number of bytes read
+	static int output_len; // Stores number of bytes read
 	switch(evt->event_id) {
 		case HTTP_EVENT_ERROR:
 			ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
@@ -89,27 +88,11 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 			// If user_data buffer is configured, copy the response into the buffer
 			if (evt->user_data) {
 				memcpy(evt->user_data + output_len, evt->data, evt->data_len);
-			} else {
-				if (output_buffer == NULL && esp_http_client_get_content_length(evt->client) > 0) {
-					output_buffer = (char *) malloc(esp_http_client_get_content_length(evt->client));
-					output_len = 0;
-					if (output_buffer == NULL) {
-						ESP_LOGE(TAG, "Failed to allocate memory for output buffer");
-						return ESP_FAIL;
-					}
-				}
-				memcpy(output_buffer + output_len, evt->data, evt->data_len);
 			}
 			output_len += evt->data_len;
 			break;
 		case HTTP_EVENT_ON_FINISH:
 			ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
-			if (output_buffer != NULL) {
-				// Response is accumulated in output_buffer. Uncomment the below line to print the accumulated response
-				// ESP_LOG_BUFFER_HEX(TAG, output_buffer, output_len);
-				free(output_buffer);
-				output_buffer = NULL;
-			}
 			output_len = 0;
 			break;
 		case HTTP_EVENT_DISCONNECTED:
@@ -117,10 +100,6 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 			int mbedtls_err = 0;
 			esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
 			if (err != 0) {
-				if (output_buffer != NULL) {
-					free(output_buffer);
-					output_buffer = NULL;
-				}
 				output_len = 0;
 				ESP_LOGE(TAG, "Last esp error code: 0x%x", err);
 				ESP_LOGE(TAG, "Last mbedtls failure: 0x%x", mbedtls_err);
@@ -141,7 +120,7 @@ void buttonA(void *pvParameters)
 {
 	ESP_LOGI(pcTaskGetName(0), "Start");
 	CMD_t cmdBuf;
-	cmdBuf.command = CMD_LEFT;
+	cmdBuf.command = BUTTON_LEFT;
 	cmdBuf.taskHandle = xTaskGetCurrentTaskHandle();
 
 	// set the GPIO as a input
@@ -168,7 +147,7 @@ void buttonB(void *pvParameters)
 {
 	ESP_LOGI(pcTaskGetName(0), "Start");
 	CMD_t cmdBuf;
-	cmdBuf.command = CMD_MIDDLE;
+	cmdBuf.command = BUTTON_MIDDLE;
 	cmdBuf.taskHandle = xTaskGetCurrentTaskHandle();
 
 	// set the GPIO as a input
@@ -195,7 +174,7 @@ void buttonC(void *pvParameters)
 {
 	ESP_LOGI(pcTaskGetName(0), "Start");
 	CMD_t cmdBuf;
-	cmdBuf.command = CMD_RIGHT;
+	cmdBuf.command = BUTTON_RIGHT;
 	cmdBuf.taskHandle = xTaskGetCurrentTaskHandle();
 
 	// set the GPIO as a input
@@ -217,7 +196,7 @@ void buttonC(void *pvParameters)
 	}
 }
 	
-size_t http_client_content_length(char * url)
+size_t http_client_content_length(char * url, char * cert_pem)
 {
 	ESP_LOGI(TAG, "http_client_content_length url=%s",url);
 	size_t content_length;
@@ -225,48 +204,49 @@ size_t http_client_content_length(char * url)
 	esp_http_client_config_t config = {
 		.url = url,
 		.event_handler = _http_event_handler,
-		//.user_data = local_response_buffer,		   // Pass address of local buffer to get response
-		.cert_pem = cert_pem_start,
+		.user_data = NULL,
+		//.user_data = local_response_buffer, // Pass address of local buffer to get response
+		.cert_pem = cert_pem,
 	};
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 
 	// GET
 	esp_err_t err = esp_http_client_perform(client);
 	if (err == ESP_OK) {
-		ESP_LOGD(TAG, "HTTP GET Status = %d, content_length = %"PRIi32,
-				esp_http_client_get_status_code(client),
-				(int32_t)esp_http_client_get_content_length(client));
+		ESP_LOGD(TAG, "HTTP GET Status = %d, content_length = %"PRId64,
+			esp_http_client_get_status_code(client),
+			esp_http_client_get_content_length(client));
 		content_length = esp_http_client_get_content_length(client);
 
 	} else {
-		ESP_LOGW(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
+		ESP_LOGE(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
 		content_length = 0;
 	}
 	esp_http_client_cleanup(client);
 	return content_length;
 }
 
-esp_err_t http_client_content_get(char * url, char * response_buffer)
+esp_err_t http_client_content_get(char * url, char * cert_pem, char * response_buffer)
 {
 	ESP_LOGI(TAG, "http_client_content_get url=%s",url);
 
 	esp_http_client_config_t config = {
 		.url = url,
 		.event_handler = _http_event_handler,
-		.user_data = response_buffer,		   // Pass address of local buffer to get response
-		.cert_pem = cert_pem_start,
+		.user_data = response_buffer, // Pass address of local buffer to get response
+		.cert_pem = cert_pem,
 	};
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 
 	// GET
 	esp_err_t err = esp_http_client_perform(client);
 	if (err == ESP_OK) {
-		ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %"PRIi32,
-				esp_http_client_get_status_code(client),
-				(int32_t)esp_http_client_get_content_length(client));
+		ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %"PRId64,
+			esp_http_client_get_status_code(client),
+			esp_http_client_get_content_length(client));
 		ESP_LOGD(TAG, "\n%s", response_buffer);
 	} else {
-		ESP_LOGW(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
+		ESP_LOGE(TAG, "HTTP GET request failed: %s", esp_err_to_name(err));
 	}
 	esp_http_client_cleanup(client);
 	return err;
@@ -432,11 +412,18 @@ void tft(void *pvParameters)
 
 	// Get content length
 	size_t content_length;
-	while (1) {
-		content_length = http_client_content_length(url);
+	for (int retry=0;retry<10;retry++) {
+		content_length = http_client_content_length(url, cert_pem_start);
 		ESP_LOGI(pcTaskGetName(0), "content_length=%d", content_length);
 		if (content_length > 0) break;
 		vTaskDelay(100);
+	}
+
+	if (content_length == 0) {
+		ESP_LOGE(pcTaskGetName(0), "[%s] server does not respond", url);
+		while(1) {
+			vTaskDelay(100);
+		}
 	}
 
 	char *response_buffer;	// Buffer to store response of http request from event handler
@@ -451,7 +438,7 @@ void tft(void *pvParameters)
 
 	// Get content
 	while(1) {
-		esp_err_t err = http_client_content_get(url, response_buffer);
+		esp_err_t err = http_client_content_get(url, cert_pem_start, response_buffer);
 		if (err == ESP_OK) break;
 		vTaskDelay(100);
 	}
@@ -549,11 +536,11 @@ void tft(void *pvParameters)
 
 	view(&dev, fx, userData, fontWidth, fontHeight);
 
+	CMD_t cmdBuf;
 	while(1) {
-		CMD_t cmdBuf;
 		xQueueReceive(xQueueCmd, &cmdBuf, portMAX_DELAY);
 		ESP_LOGI(pcTaskGetName(0),"cmdBuf.command=%d", cmdBuf.command);
-		if (cmdBuf.command == CMD_LEFT) break;
+		if (cmdBuf.command == BUTTON_LEFT) break;
 	}
 
 	// restart

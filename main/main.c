@@ -109,11 +109,10 @@ esp_err_t wifi_init_sta(void)
 			},
 		},
 	};
+	ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
 	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
 	ESP_ERROR_CHECK(esp_wifi_start() );
-
-	ESP_LOGI(TAG, "wifi_init_sta finished.");
 
 	/* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
 	 * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
@@ -141,11 +140,6 @@ esp_err_t wifi_init_sta(void)
 	vEventGroupDelete(s_wifi_event_group);
 	return ret_value;
 }
-
-void buttonA(void *pvParameters);
-void buttonB(void *pvParameters);
-void buttonC(void *pvParameters);
-void tft(void *pvParameters);
 
 static void SPIFFS_Directory(char * path) {
 	DIR* dir = opendir(path);
@@ -242,9 +236,15 @@ static void periodic_timer_callback(void* arg)
 	ESP_LOGI(TAG, "The current date/time is: %s", strftime_buf);
 	ESP_LOGI(TAG, "timeinfo.tm_hour=%d", timeinfo.tm_hour);
 	ESP_LOGI(TAG, "timeinfo.tm_min=%d", timeinfo.tm_min);
+
+	// Restart every hour on the hour for get new forecast
 	if (timeinfo.tm_min == 0) esp_restart();
 }
 
+void buttonA(void *pvParameters);
+void buttonB(void *pvParameters);
+void buttonC(void *pvParameters);
+void tft(void *pvParameters);
 
 void app_main()
 {
@@ -257,28 +257,15 @@ void app_main()
 	ESP_ERROR_CHECK(ret);
 
 	// Initialize SPIFFS
-	ESP_LOGI(TAG, "Initializing SPIFFS");
-	if (SPIFFS_Mount("/font", "storage", 7) != ESP_OK)
-	{
-		ESP_LOGE(TAG, "SPIFFS mount failed");
-		while(1) { vTaskDelay(1); }
-	}
+	ESP_ERROR_CHECK(SPIFFS_Mount("/font", "storage", 7));
 
 	// Initialize WiFi
-	ESP_LOGI(TAG, "Initializing WiFi");
-	if (wifi_init_sta() != ESP_OK) {
-		ESP_LOGE(TAG, "Connection failed");
-		while(1) { vTaskDelay(1); }
-	}
+	ESP_ERROR_CHECK(wifi_init_sta());
 	
-	// obtain time over NTP
-	ret = obtain_time();
-	if(ret != ESP_OK) {
-		ESP_LOGE(TAG, "Fail to getting time over NTP.");
-		return;
-	}
+	// Obtain time over NTP
+	ESP_ERROR_CHECK(obtain_time());
 
-	// update 'now' variable with current time
+	// Show current local time
 	time_t now;
 	struct tm timeinfo;
 	char strftime_buf[64];
@@ -297,7 +284,7 @@ void app_main()
 
 	esp_timer_handle_t periodic_timer;
 	ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-	ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 60000000));
+	ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 60*1000*1000));
 
 	// Create Queue
 	xQueueCmd = xQueueCreate( 10, sizeof(CMD_t) );
