@@ -54,7 +54,7 @@ Wi-Fiに接続するときの最大再試行回数
 毎時０分に再起動して情報を更新します。   
 
 # JSON Library   
-ESP-IDE標準のSONライブラリを使用しています。   
+ESP-IDE標準のJSONライブラリを使用しています。   
 
 
 # Font File   
