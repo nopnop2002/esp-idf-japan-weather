@@ -26,12 +26,6 @@
 
 #include "cmd.h"
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
-#define sntp_setoperatingmode esp_sntp_setoperatingmode
-#define sntp_setservername esp_sntp_setservername
-#define sntp_init esp_sntp_init
-#endif
-
 QueueHandle_t xQueueCmd;
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -70,11 +64,9 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 
 esp_err_t wifi_init_sta(void)
 {
-	esp_err_t ret_value = ESP_OK;
 	s_wifi_event_group = xEventGroupCreate();
 
 	ESP_ERROR_CHECK(esp_netif_init());
-
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
 	esp_netif_create_default_wifi_sta();
 
@@ -110,12 +102,13 @@ esp_err_t wifi_init_sta(void)
 		},
 	};
 	ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
-	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-	ESP_ERROR_CHECK(esp_wifi_start() );
+	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+	ESP_ERROR_CHECK(esp_wifi_start());
 
 	/* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
 	 * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+	esp_err_t ret_value = ESP_OK;
 	EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
 		WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
 		pdFALSE,
@@ -198,10 +191,10 @@ void time_sync_notification_cb(struct timeval *tv)
 static void initialize_sntp(void)
 {
 	ESP_LOGI(TAG, "Initializing SNTP");
-	sntp_setoperatingmode(SNTP_OPMODE_POLL);
-	sntp_setservername(0, "pool.ntp.org");
+	esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+	esp_sntp_setservername(0, "pool.ntp.org");
 	sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-	sntp_init();
+	esp_sntp_init();
 }
 
 static esp_err_t obtain_time(void)
@@ -277,9 +270,9 @@ void app_main()
 
 	// a periodic timer which will run every 60s, and print a message
 	const esp_timer_create_args_t periodic_timer_args = {
-			.callback = &periodic_timer_callback,
-			/* name is optional, but may help identify the timer when debugging */
-			.name = "periodic"
+		.callback = &periodic_timer_callback,
+		/* name is optional, but may help identify the timer when debugging */
+		.name = "periodic"
 	};
 
 	esp_timer_handle_t periodic_timer;
