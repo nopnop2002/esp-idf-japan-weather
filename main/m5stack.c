@@ -81,6 +81,14 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 		case HTTP_EVENT_ON_HEADER:
 			ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
 			break;
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+		case HTTP_EVENT_ON_HEADERS_COMPLETE:
+			ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADERS_COMPLETE");
+			break;
+		case HTTP_EVENT_ON_STATUS_CODE:
+			ESP_LOGD(TAG, "HTTP_EVENT_ON_STATUS_CODE");
+			break;
+#endif
 		case HTTP_EVENT_ON_DATA:
 			ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
 			//ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, content_length=%d", esp_http_client_get_content_length(evt->client));
@@ -338,67 +346,67 @@ void tft(void *pvParameters)
 	USER_DATA_t userData;
 	int location;
 #if CONFIG_ESP_LOCATION_304
-	strcpy((char *)userData.title, u8"釧路");
+	strcpy((char *)userData.title, (char *)u8"釧路");
 	location = 304;
 #elif CONFIG_ESP_LOCATION_302
-	strcpy((char *)userData.title, u8"旭川");
+	strcpy((char *)userData.title, (char *)u8"旭川");
 	location = 302;
 #elif CONFIG_ESP_LOCATION_306
-	strcpy((char *)userData.title, u8"札幌");
+	strcpy((char *)userData.title, (char *)u8"札幌");
 	location = 306;
 #elif CONFIG_ESP_LOCATION_308
-	strcpy((char *)userData.title, u8"青森");
+	strcpy((char *)userData.title, (char *)u8"青森");
 	location = 308;
 #elif CONFIG_ESP_LOCATION_309
-	strcpy((char *)userData.title, u8"秋田");
+	strcpy((char *)userData.title, (char *)u8"秋田");
 	location = 309;
 #elif CONFIG_ESP_LOCATION_312
-	strcpy((char *)userData.title, u8"仙台");
+	strcpy((char *)userData.title, (char *)u8"仙台");
 	location = 312;
 #elif CONFIG_ESP_LOCATION_323
-	strcpy((char *)userData.title, u8"新潟");
+	strcpy((char *)userData.title, (char *)u8"新潟");
 	location = 323;
 #elif CONFIG_ESP_LOCATION_325
-	strcpy((char *)userData.title, u8"金沢");
+	strcpy((char *)userData.title, (char *)u8"金沢");
 	location = 325;
 #elif CONFIG_ESP_LOCATION_319
-	strcpy((char *)userData.title, u8"東京");
+	strcpy((char *)userData.title, (char *)u8"東京");
 	location = 319;
 #elif CONFIG_ESP_LOCATION_316
-	strcpy((char *)userData.title, u8"宇都宮");
+	strcpy((char *)userData.title, (char *)u8"宇都宮");
 	location = 316;
 #elif CONFIG_ESP_LOCATION_322
-	strcpy((char *)userData.title, u8"長野");
+	strcpy((char *)userData.title, (char *)u8"長野");
 	location = 322;
 #elif CONFIG_ESP_LOCATION_329
-	strcpy((char *)userData.title, u8"名古屋");
+	strcpy((char *)userData.title, (char *)u8"名古屋");
 	location = 329;
 #elif CONFIG_ESP_LOCATION_331
-	strcpy((char *)userData.title, u8"大阪");
+	strcpy((char *)userData.title, (char *)u8"大阪");
 	location = 331;
 #elif CONFIG_ESP_LOCATION_341
-	strcpy((char *)userData.title, u8"高松");
+	strcpy((char *)userData.title, (char *)u8"高松");
 	location = 341;
 #elif CONFIG_ESP_LOCATION_337
-	strcpy((char *)userData.title, u8"松江");
+	strcpy((char *)userData.title, (char *)u8"松江");
 	location = 337;
 #elif CONFIG_ESP_LOCATION_338
-	strcpy((char *)userData.title, u8"広島");
+	strcpy((char *)userData.title, (char *)u8"広島");
 	location = 338;
 #elif CONFIG_ESP_LOCATION_344
-	strcpy((char *)userData.title, u8"高知");
+	strcpy((char *)userData.title, (char *)u8"高知");
 	location = 344;
 #elif CONFIG_ESP_LOCATION_346
-	strcpy((char *)userData.title, u8"福岡");
+	strcpy((char *)userData.title, (char *)u8"福岡");
 	location = 346;
 #elif CONFIG_ESP_LOCATION_352
-	strcpy((char *)userData.title, u8"鹿児島");
+	strcpy((char *)userData.title, (char *)u8"鹿児島");
 	location = 352;
 #elif CONFIG_ESP_LOCATION_353
-	strcpy((char *)userData.title, u8"那覇");
+	strcpy((char *)userData.title, (char *)u8"那覇");
 	location = 353;
 #elif CONFIG_ESP_LOCATION_356
-	strcpy((char *)userData.title, u8"石垣");
+	strcpy((char *)userData.title, (char *)u8"石垣");
 	location = 356;
 #endif
 
